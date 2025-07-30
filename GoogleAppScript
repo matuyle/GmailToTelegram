@@ -1,0 +1,60 @@
+/*  ----- USER CONFIG SECTION -----
+ *  1) Fill in BOT_TOKEN and CHAT_ID
+ *  2) Adjust CHECK_LABEL if you want processed mail stored elsewhere
+ */
+const BOT_TOKEN = 'YOUR BOT TOKEN';
+const CHAT_ID   = 'YOUR TELEGRAM CHAT ID';          // e.g. 123456789
+const CHECK_LABEL = 'Processed-to-Telegram';        // created automatically
+//-----------------------------------*/
+function checkMail() {
+  const queryString = `is:unread (subject:"Any topic" OR from:(john.doe@gmail.com jane.doe@gmail.com))`;
+
+  const threads = GmailApp.search(queryString, 0, 50);
+  if (!threads.length) return;
+
+  const label = getOrCreateLabel(CHECK_LABEL);
+
+  threads.forEach(thread => {
+    const msgs = thread.getMessages();
+    const lastMsg = msgs[msgs.length - 1];
+
+    const subj = lastMsg.getSubject();
+    const from = lastMsg.getFrom();
+    const bodyPreview = lastMsg.getPlainBody()
+      // keep only the part before quoted replies or signature
+      .split(/\n(?:>+|--|On .*wrote:)/)[0]
+      .trim()
+      .slice(0, 1000)
+      .replace(/\n+/g, ' ');
+
+    // Link opens Gmail; Android will hand it to the Gmail app if set as default
+    const threadUrl = `https://mail.google.com/mail/u/0/#inbox/${thread.getId()}`;
+
+    const text =
+      `📧 *New matched email*\n` +
+      `*From:* ${from}\n` +
+      `*Subject:* ${subj}\n` +
+      `[Open in Gmail](${threadUrl})\n\n` +
+      `*Preview:*\n${bodyPreview}`;
+
+    sendTelegram(text);
+
+    thread.addLabel(label);
+    thread.markRead();
+  });
+}
+/* ------- Helpers ------- */
+function sendTelegram(message) {
+  const url = `https://api.telegram.org/bot${BOT_TOKEN}/sendMessage`;  // ← use backticks!
+  const payload = {
+    chat_id: CHAT_ID,
+    text: message,
+    parse_mode: 'Markdown'
+  };
+  UrlFetchApp.fetch(url, { method: 'post', payload: payload, muteHttpExceptions: true });
+}
+
+
+function getOrCreateLabel(name) {
+  return GmailApp.getUserLabelByName(name) || GmailApp.createLabel(name);
+}
